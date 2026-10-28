@@ -317,6 +317,7 @@ namespace WindowsPersonalizer
                 DockMag.Value = t.DockMagnification;
                 DockReserve.IsChecked = t.DockReserveSpace;
                 DockRunning.IsChecked = t.DockShowRunning;
+                DockSearch.IsChecked = t.DockShowSearch;
 
                 TopBarEnabled.IsChecked = t.TopBarEnabled;
                 TopBarStyleBox.SelectedIndex = t.TopBarStyle == TopBarStyle.MacOS ? 0 : 1;
@@ -375,6 +376,7 @@ namespace WindowsPersonalizer
                 DockMagnification = Math.Round(DockMag.Value, 1),
                 DockReserveSpace = DockReserve.IsChecked == true,
                 DockShowRunning = DockRunning.IsChecked == true,
+                DockShowSearch = DockSearch.IsChecked == true,
 
                 TopBarEnabled = TopBarEnabled.IsChecked == true,
                 TopBarStyle = TopBarStyleBox.SelectedIndex == 1 ? TopBarStyle.Gnome : TopBarStyle.MacOS,

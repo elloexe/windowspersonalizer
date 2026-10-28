@@ -54,6 +54,7 @@ namespace WindowsPersonalizer
             };
 
             Config = ConfigStore.Load();
+            RemoveOldEdgeDefault();
             Shell = new ShellManager(Config, ShowMainWindow);
             CreateTrayIcon();
 
@@ -71,6 +72,15 @@ namespace WindowsPersonalizer
                 ShowMainWindow();
             else if (!Shell.IsRunning)
                 ExitApp(); // Started with Windows but there's nothing to run.
+        }
+
+        private void RemoveOldEdgeDefault()
+        {
+            if (Config.EdgeDefaultRemoved) return;
+            Config.DockItems?.RemoveAll(d =>
+                (d.Target ?? "").EndsWith(@"\msedge.exe", StringComparison.OrdinalIgnoreCase));
+            Config.EdgeDefaultRemoved = true;
+            try { ConfigStore.Save(Config); } catch { }
         }
 
         public void ShowMainWindow()

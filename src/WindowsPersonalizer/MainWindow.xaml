@@ -169,6 +169,7 @@
                                 </DockPanel>
                                 <CheckBox x:Name="DockReserve" Content="Keep windows from covering the Dock" />
                                 <CheckBox x:Name="DockRunning" Content="Show a dot under running apps" />
+                                <CheckBox x:Name="DockSearch" Content="Show a Search button in the Dock" />
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource Card}">

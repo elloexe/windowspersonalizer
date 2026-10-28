@@ -97,6 +97,7 @@ namespace WindowsPersonalizer.Model
         public double DockMagnification { get; set; } = 1.7;
         public bool DockReserveSpace { get; set; } = true;
         public bool DockShowRunning { get; set; } = true;
+        public bool DockShowSearch { get; set; } = true;
 
         // Top bar
         public bool TopBarEnabled { get; set; }
@@ -129,5 +130,7 @@ namespace WindowsPersonalizer.Model
         /// <summary>True once the user pressed Apply (dock/top bar should run).</summary>
         public bool Applied { get; set; }
         public bool ShownTrayHint { get; set; }
+        /// <summary>Edge used to be pinned to the Dock by default; it is removed once from older setups.</summary>
+        public bool EdgeDefaultRemoved { get; set; }
     }
 }

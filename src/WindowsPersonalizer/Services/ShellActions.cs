@@ -155,13 +155,11 @@ namespace WindowsPersonalizer.Services
         {
             string win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
             string pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            string pf86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
             string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
             var candidates = new List<DockItem>
             {
                 new DockItem { Name = "File Explorer", Target = Path.Combine(win, "explorer.exe") },
-                new DockItem { Name = "Microsoft Edge", Target = Path.Combine(pf86, @"Microsoft\Edge\Application\msedge.exe") },
                 new DockItem { Name = "Google Chrome", Target = Path.Combine(pf, @"Google\Chrome\Application\chrome.exe") },
                 new DockItem { Name = "Google Chrome", Target = Path.Combine(local, @"Google\Chrome\Application\chrome.exe") },
                 new DockItem { Name = "Firefox", Target = Path.Combine(pf, @"Mozilla Firefox\firefox.exe") },

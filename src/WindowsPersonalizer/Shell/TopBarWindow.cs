@@ -149,6 +149,9 @@ namespace WindowsPersonalizer.Shell
             grid.Children.Add(clock);
 
             var right = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            var search = BarButton(Glyph("\uE721"), ShellActions.OpenSearch);
+            search.ToolTip = "Search";
+            right.Children.Add(search);
             var status = new StackPanel { Orientation = Orientation.Horizontal };
             status.Children.Add(Glyph(""));
             status.Children.Add(Glyph(""));

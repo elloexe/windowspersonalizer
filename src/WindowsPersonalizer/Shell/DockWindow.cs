@@ -193,6 +193,8 @@ namespace WindowsPersonalizer.Shell
             var accent = ColorUtil.Parse(_theme.AccentColor, Colors.DodgerBlue);
 
             AddCell(null, "Start", IconService.LauncherIcon(accent), ShellActions.OpenStart);
+            if (_theme.DockShowSearch)
+                AddCell(null, "Search", IconService.SearchIcon(accent), ShellActions.OpenSearch);
 
             foreach (var item in _config.DockItems ?? new List<DockItem>())
             {

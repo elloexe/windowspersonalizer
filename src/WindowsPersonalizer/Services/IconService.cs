@@ -138,6 +138,24 @@ namespace WindowsPersonalizer.Services
             return _fallback;
         }
 
+        /// <summary>A magnifying-glass "Search" icon.</summary>
+        public static ImageSource SearchIcon(Color accent)
+        {
+            var g = new DrawingGroup();
+            using (var dc = g.Open())
+            {
+                dc.DrawRoundedRectangle(new LinearGradientBrush(Color.FromRgb(0x8E, 0x8E, 0x96), Color.FromRgb(0x48, 0x48, 0x50), 90),
+                    null, new Rect(0, 0, 100, 100), 24, 24);
+                var pen = new Pen(Brushes.White, 9) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+                dc.DrawEllipse(null, pen, new Point(44, 44), 19, 19);
+                dc.DrawLine(pen, new Point(58, 58), new Point(74, 74));
+            }
+            g.Freeze();
+            var img = new DrawingImage(g);
+            img.Freeze();
+            return img;
+        }
+
         /// <summary>A Launchpad-style "all apps" icon (grid of dots).</summary>
         public static ImageSource LauncherIcon(Color accent)
         {
