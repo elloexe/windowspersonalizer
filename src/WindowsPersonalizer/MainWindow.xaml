@@ -171,6 +171,7 @@
                                 <CheckBox x:Name="DockReserve" Content="Keep windows from covering the Dock" />
                                 <CheckBox x:Name="DockRunning" Content="Show a dot under running apps" />
                                 <CheckBox x:Name="DockSearch" Content="Show a Search button in the Dock" />
+                                <CheckBox x:Name="DockOpenApps" Content="Show open apps in the Dock (like the taskbar does)" />
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource Card}">
@@ -185,6 +186,8 @@
                                     </Grid.ColumnDefinitions>
                                     <ListBox x:Name="DockList" Height="240" BorderBrush="{StaticResource CardBorder}" />
                                     <StackPanel Grid.Column="1" Margin="10,0,0,0" Width="130">
+                                        <Button Content="Use my taskbar apps" Click="DockFromTaskbar_Click" Margin="0,0,0,6"
+                                                ToolTip="Fill the Dock with the apps pinned to your Windows taskbar" />
                                         <Button Content="Add app…" Click="DockAdd_Click" Margin="0,0,0,6" />
                                         <Button Content="Add folder…" Click="DockAddFolder_Click" Margin="0,0,0,6" />
                                         <Button Content="Remove" Click="DockRemove_Click" Margin="0,0,0,6" />

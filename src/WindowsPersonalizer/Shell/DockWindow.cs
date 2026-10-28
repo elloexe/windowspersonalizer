@@ -41,7 +41,9 @@ namespace WindowsPersonalizer.Shell
         private readonly Border _background = new Border();
         private readonly StackPanel _panel = new StackPanel();
         private readonly List<Cell> _cells = new List<Cell>();
-        private readonly DispatcherTimer _runningTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        private readonly DispatcherTimer _runningTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        private List<WindowList.AppGroup> _apps = new List<WindowList.AppGroup>();
+        private string _shownOpenApps = "";
         private readonly Border _inner = new Border();
         private readonly double _radius;
         private AppBar _appBar;
@@ -55,8 +57,8 @@ namespace WindowsPersonalizer.Shell
             public FrameworkElement Element;
             public Image Icon;
             public Ellipse Dot;
-            public DockItem Item;          // null for launcher, recycle bin and separators
-            public string ProcessName;
+            public DockItem Item;          // null for launcher, recycle bin, open apps and separators
+            public string AppKey;          // lower-case exe name used to match open windows
             public bool IsSeparator;
             public double BaseLength;      // length along the dock axis at rest
         }
@@ -88,6 +90,7 @@ namespace WindowsPersonalizer.Shell
 
             BuildChrome();
             ApplyMaterial(glass: false);
+            RefreshApps();
             BuildItems();
             Content = _root;
 
@@ -253,6 +256,23 @@ namespace WindowsPersonalizer.Shell
         private ContextMenu NewMenu() =>
             MenuTheme.Create(Dark, ColorUtil.Parse(_theme.AccentColor, Colors.DodgerBlue));
 
+        private void RefreshApps()
+        {
+            try { _apps = WindowList.GetApps(); }
+            catch { _apps = new List<WindowList.AppGroup>(); }
+        }
+
+        /// <summary>Open apps that are not pinned (shown in their own section, like the taskbar).</summary>
+        private List<WindowList.AppGroup> UnpinnedOpenApps()
+        {
+            if (!_theme.DockShowOpenApps) return new List<WindowList.AppGroup>();
+            var pinned = new HashSet<string>((_config.DockItems ?? new List<DockItem>())
+                .Select(KeyOf).Where(k => k != null));
+            return _apps.Where(a => !pinned.Contains(a.Key)).ToList();
+        }
+
+        private static string KeyOf(DockItem item) => ShellActions.ProcessNameOf(item)?.ToLowerInvariant();
+
         private void BuildItems()
         {
             _panel.Children.Clear();
@@ -266,18 +286,31 @@ namespace WindowsPersonalizer.Shell
             foreach (var item in _config.DockItems ?? new List<DockItem>())
             {
                 var it = item;
-                AddCell(it, it.Name, IconService.Get(it.Target), () => OpenItem(it));
+                AddCell(it, it.Name, IconService.Get(it.Target), () => OpenItem(it), KeyOf(it));
+            }
+
+            var open = UnpinnedOpenApps();
+            _shownOpenApps = string.Join("|", open.Select(a => a.Key));
+            if (open.Count > 0)
+            {
+                AddSeparator();
+                foreach (var app in open)
+                {
+                    string key = app.Key, exe = app.ExePath, name = app.Name;
+                    AddCell(null, name, IconService.Get(exe), () => SwitchTo(key, exe), key, openApp: app);
+                }
             }
 
             AddSeparator();
             AddCell(null, "Recycle Bin", IconService.Get(ShellActions.RecycleBin),
                 () => ShellActions.Launch(new DockItem { Target = ShellActions.RecycleBin }));
 
-            UpdateRunning();
-            if (_theme.DockShowRunning) _runningTimer.Start();
+            UpdateDots();
+            if (_theme.DockShowRunning || _theme.DockShowOpenApps) _runningTimer.Start();
         }
 
-        private void AddCell(DockItem item, string label, ImageSource icon, Action click)
+        private void AddCell(DockItem item, string label, ImageSource icon, Action click,
+            string appKey = null, WindowList.AppGroup openApp = null)
         {
             var img = new Image
             {
@@ -360,6 +393,21 @@ namespace WindowsPersonalizer.Shell
                         System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{expanded}\"")));
                 menu.Items.Add(new Separator());
                 menu.Items.Add(MenuItem("Remove from Dock", () => RemoveItem(item)));
+                if (appKey != null)
+                {
+                    var quit = MenuItem("Quit", () => QuitApp(appKey));
+                    menu.Items.Add(quit);
+                    menu.Opened += (_, __) => quit.Visibility =
+                        WindowList.Find(_apps, appKey) != null ? Visibility.Visible : Visibility.Collapsed;
+                }
+                cell.ContextMenu = menu;
+            }
+            else if (openApp != null)
+            {
+                var menu = NewMenu();
+                menu.Items.Add(MenuItem("Keep in Dock", () => PinOpenApp(openApp)));
+                menu.Items.Add(new Separator());
+                menu.Items.Add(MenuItem("Quit", () => QuitApp(appKey)));
                 cell.ContextMenu = menu;
             }
 
@@ -370,7 +418,7 @@ namespace WindowsPersonalizer.Shell
                 Icon = img,
                 Dot = dot,
                 Item = item,
-                ProcessName = item != null ? ShellActions.ProcessNameOf(item) : null,
+                AppKey = appKey,
                 BaseLength = _baseSize + Gap,
             });
         }
@@ -480,25 +528,50 @@ namespace WindowsPersonalizer.Shell
 
         // ---- Apps -----------------------------------------------------------------
 
-        private static void OpenItem(DockItem item)
+        private void OpenItem(DockItem item)
         {
-            // Like macOS: clicking a running app brings it forward, otherwise launch it.
-            if (!ShellActions.Activate(ShellActions.ProcessNameOf(item)))
+            // Like the taskbar: a running app comes to the front (or minimizes if it's already
+            // in front); otherwise it's launched.
+            RefreshApps();
+            if (!WindowList.ActivateOrMinimize(WindowList.Find(_apps, KeyOf(item))))
                 ShellActions.Launch(item);
         }
 
+        private void SwitchTo(string key, string exePath)
+        {
+            RefreshApps();
+            if (!WindowList.ActivateOrMinimize(WindowList.Find(_apps, key)) && File.Exists(exePath))
+                ShellActions.Launch(new DockItem { Target = exePath });
+        }
+
+        private void QuitApp(string key)
+        {
+            RefreshApps();
+            var app = WindowList.Find(_apps, key);
+            if (app != null) WindowList.Close(app);
+        }
+
+        private void PinOpenApp(WindowList.AppGroup app)
+        {
+            _config.DockItems ??= new List<DockItem>();
+            _config.DockItems.Add(new DockItem { Name = app.Name, Target = app.ExePath });
+            _saveConfig();
+            BuildItems();
+        }
+
+        /// <summary>Runs every second: rebuilds the open-apps section if it changed, updates dots.</summary>
         private void UpdateRunning()
         {
-            if (!_theme.DockShowRunning)
-            {
-                foreach (var c in _cells.Where(c => c.Dot != null)) c.Dot.Visibility = Visibility.Collapsed;
-                return;
-            }
-            HashSet<string> running;
-            try { running = ShellActions.RunningProcessNames(); }
-            catch { return; }
+            RefreshApps();
+            string open = string.Join("|", UnpinnedOpenApps().Select(a => a.Key));
+            if (open != _shownOpenApps) BuildItems();
+            else UpdateDots();
+        }
+
+        private void UpdateDots()
+        {
             foreach (var c in _cells.Where(c => c.Dot != null))
-                c.Dot.Visibility = c.ProcessName != null && running.Contains(c.ProcessName)
+                c.Dot.Visibility = _theme.DockShowRunning && c.AppKey != null && WindowList.Find(_apps, c.AppKey) != null
                     ? Visibility.Visible : Visibility.Collapsed;
         }
 

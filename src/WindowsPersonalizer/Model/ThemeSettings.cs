@@ -100,6 +100,8 @@ namespace WindowsPersonalizer.Model
         public bool DockReserveSpace { get; set; } = true;
         public bool DockShowRunning { get; set; } = true;
         public bool DockShowSearch { get; set; } = true;
+        /// <summary>Show open apps that aren't pinned, like the Windows taskbar does.</summary>
+        public bool DockShowOpenApps { get; set; } = true;
 
         // Top bar
         public bool TopBarEnabled { get; set; }
@@ -134,5 +136,7 @@ namespace WindowsPersonalizer.Model
         public bool ShownTrayHint { get; set; }
         /// <summary>Edge used to be pinned to the Dock by default; it is removed once from older setups.</summary>
         public bool EdgeDefaultRemoved { get; set; }
+        /// <summary>Set once the Dock has been filled from the user's Windows taskbar.</summary>
+        public bool ImportedTaskbarPins { get; set; }
     }
 }

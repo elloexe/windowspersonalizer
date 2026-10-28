@@ -319,6 +319,7 @@ namespace WindowsPersonalizer
                 DockReserve.IsChecked = t.DockReserveSpace;
                 DockRunning.IsChecked = t.DockShowRunning;
                 DockSearch.IsChecked = t.DockShowSearch;
+                DockOpenApps.IsChecked = t.DockShowOpenApps;
 
                 TopBarEnabled.IsChecked = t.TopBarEnabled;
                 TopBarStyleBox.SelectedIndex = t.TopBarStyle == TopBarStyle.MacOS ? 0 : 1;
@@ -379,6 +380,7 @@ namespace WindowsPersonalizer
                 DockReserveSpace = DockReserve.IsChecked == true,
                 DockShowRunning = DockRunning.IsChecked == true,
                 DockShowSearch = DockSearch.IsChecked == true,
+                DockShowOpenApps = DockOpenApps.IsChecked == true,
 
                 TopBarEnabled = TopBarEnabled.IsChecked == true,
                 TopBarStyle = TopBarStyleBox.SelectedIndex == 1 ? TopBarStyle.Gnome : TopBarStyle.MacOS,
@@ -557,6 +559,19 @@ namespace WindowsPersonalizer
             if (i < 0 || j < 0 || j >= _config.DockItems.Count) return;
             (_config.DockItems[i], _config.DockItems[j]) = (_config.DockItems[j], _config.DockItems[i]);
             DockChanged(j);
+        }
+
+        private void DockFromTaskbar_Click(object sender, RoutedEventArgs e)
+        {
+            var pins = ShellActions.TaskbarPins();
+            if (pins.Count == 0)
+            {
+                MessageBox.Show(this, "No pinned apps were found on your Windows taskbar.", "Use my taskbar apps");
+                return;
+            }
+            _config.DockItems = ShellActions.DefaultDockItems();
+            DockChanged();
+            SetStatus($"Dock now has your {pins.Count} taskbar apps. Press Apply to update the Dock.");
         }
 
         private void DockReset_Click(object sender, RoutedEventArgs e)

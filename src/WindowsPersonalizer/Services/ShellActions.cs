@@ -50,58 +50,6 @@ namespace WindowsPersonalizer.Services
             return null;
         }
 
-        /// <summary>Brings an app's existing window to the front. Returns false if it has none.</summary>
-        public static bool Activate(string processName)
-        {
-            if (string.IsNullOrEmpty(processName) ||
-                processName.Equals("explorer", StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            foreach (var p in Process.GetProcessesByName(processName))
-            {
-                try
-                {
-                    IntPtr h = p.MainWindowHandle;
-                    if (h == IntPtr.Zero) continue;
-                    if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
-                    SetForegroundWindow(h);
-                    return true;
-                }
-                catch
-                {
-                    // Process exited or access denied: try the next one.
-                }
-            }
-            return false;
-        }
-
-        public static HashSet<string> RunningProcessNames()
-        {
-            // Processes that own at least one visible top-level window.
-            var pids = new HashSet<uint>();
-            EnumWindows((h, _) =>
-            {
-                if (IsWindowVisible(h))
-                {
-                    GetWindowThreadProcessId(h, out uint pid);
-                    pids.Add(pid);
-                }
-                return true;
-            }, IntPtr.Zero);
-
-            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var p in Process.GetProcesses())
-            {
-                try
-                {
-                    if (pids.Contains((uint)p.Id)) set.Add(p.ProcessName);
-                }
-                catch { }
-                finally { p.Dispose(); }
-            }
-            return set;
-        }
-
         /// <summary>Presses Win (+ an optional key), e.g. Win alone opens Start, Win+A opens Quick Settings.</summary>
         public static void WinKey(char? key = null)
         {
@@ -150,8 +98,57 @@ namespace WindowsPersonalizer.Services
         private static void Run(string exe, string args) =>
             Process.Start(new ProcessStartInfo(exe, args) { CreateNoWindow = true, UseShellExecute = false });
 
-        /// <summary>Apps pinned to a fresh dock, keeping only the ones installed on this PC.</summary>
+        private static bool IsEdge(string pathOrName) =>
+            (pathOrName ?? "").IndexOf("msedge", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            (pathOrName ?? "").IndexOf("Microsoft Edge", StringComparison.OrdinalIgnoreCase) >= 0;
+
+        /// <summary>
+        /// The apps pinned to the user's Windows taskbar (desktop apps; Windows keeps those as
+        /// shortcuts). The shortcuts are copied so the Dock keeps working if they're unpinned later.
+        /// Edge is left out.
+        /// </summary>
+        public static List<DockItem> TaskbarPins()
+        {
+            var result = new List<DockItem>();
+            string pinned = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                @"Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar");
+            if (!Directory.Exists(pinned)) return result;
+
+            string copies = Path.Combine(ConfigStore.Folder, "pins");
+            Directory.CreateDirectory(copies);
+
+            // Windows keeps the taskbar order in the registry; file dates are a good approximation.
+            foreach (var lnk in new DirectoryInfo(pinned).GetFiles("*.lnk").OrderBy(f => f.CreationTimeUtc))
+            {
+                string target = ShortcutResolver.GetTarget(lnk.FullName) ?? "";
+                if (IsEdge(lnk.Name) || IsEdge(target)) continue;
+                string copy = Path.Combine(copies, lnk.Name);
+                try { File.Copy(lnk.FullName, copy, true); }
+                catch { copy = lnk.FullName; }
+                result.Add(new DockItem { Name = Path.GetFileNameWithoutExtension(lnk.Name), Target = copy });
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// What a fresh Dock contains: File Explorer plus the apps on the user's taskbar, or a
+        /// sensible set of installed apps if the taskbar has nothing pinned.
+        /// </summary>
         public static List<DockItem> DefaultDockItems()
+        {
+            var fromTaskbar = TaskbarPins();
+            if (fromTaskbar.Count > 0)
+            {
+                string explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+                if (!fromTaskbar.Any(d => ProcessNameOf(d)?.Equals("explorer", StringComparison.OrdinalIgnoreCase) == true
+                                          || d.Name.Equals("File Explorer", StringComparison.OrdinalIgnoreCase)))
+                    fromTaskbar.Insert(0, new DockItem { Name = "File Explorer", Target = explorer });
+                return fromTaskbar;
+            }
+            return BuiltInDockItems();
+        }
+
+        private static List<DockItem> BuiltInDockItems()
         {
             string win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
             string pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);

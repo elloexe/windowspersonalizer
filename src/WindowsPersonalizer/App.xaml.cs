@@ -54,7 +54,7 @@ namespace WindowsPersonalizer
             };
 
             Config = ConfigStore.Load();
-            RemoveOldEdgeDefault();
+            MigrateOldDockSettings();
             Shell = new ShellManager(Config, ShowMainWindow);
             CreateTrayIcon();
 
@@ -74,12 +74,24 @@ namespace WindowsPersonalizer
                 ExitApp(); // Started with Windows but there's nothing to run.
         }
 
-        private void RemoveOldEdgeDefault()
+        private void MigrateOldDockSettings()
         {
-            if (Config.EdgeDefaultRemoved) return;
+            if (Config.EdgeDefaultRemoved && Config.ImportedTaskbarPins) return;
             Config.DockItems?.RemoveAll(d =>
                 (d.Target ?? "").EndsWith(@"\msedge.exe", StringComparison.OrdinalIgnoreCase));
             Config.EdgeDefaultRemoved = true;
+
+            // Older versions started the Dock with a fixed app list; switch once to the user's own taskbar apps.
+            if (!Config.ImportedTaskbarPins)
+            {
+                try
+                {
+                    if (Config.DockItems != null && ShellActions.TaskbarPins().Count > 0)
+                        Config.DockItems = ShellActions.DefaultDockItems();
+                }
+                catch { }
+                Config.ImportedTaskbarPins = true;
+            }
             try { ConfigStore.Save(Config); } catch { }
         }
 
