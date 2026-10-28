@@ -42,7 +42,13 @@ namespace WindowsPersonalizer.Shell
         private readonly StackPanel _panel = new StackPanel();
         private readonly List<Cell> _cells = new List<Cell>();
         private readonly DispatcherTimer _runningTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        private readonly Border _inner = new Border();
+        private readonly double _radius;
         private AppBar _appBar;
+        private BackdropWindow _backdrop;
+        private Int32Rect _lastBackdrop;
+        private Point? _mouse;
+        private bool _animating;
 
         private sealed class Cell
         {
@@ -68,6 +74,7 @@ namespace WindowsPersonalizer.Shell
             _maxSize = magnify ? _baseSize * Math.Max(1.0, Math.Min(2.5, theme.DockMagnification)) : _baseSize;
             _edgeGap = theme.DockStyle == DockStyle.Floating ? 6 : 0;
             _thickness = _baseSize + Pad * 2 + _edgeGap;
+            _radius = theme.DockStyle == DockStyle.Panel ? 0 : Math.Round(_baseSize * 0.3 + 6);
 
             Title = "Dock";
             WindowStyle = WindowStyle.None;
@@ -80,11 +87,14 @@ namespace WindowsPersonalizer.Shell
             AllowDrop = true;
 
             BuildChrome();
+            ApplyMaterial(glass: false);
             BuildItems();
             Content = _root;
 
-            _root.MouseMove += (_, e) => Magnify(e.GetPosition(_root));
-            _root.MouseLeave += (_, __) => ResetSizes();
+            _root.MouseMove += (_, e) => { _mouse = e.GetPosition(_root); StartAnimating(); };
+            _root.MouseLeave += (_, __) => { _mouse = null; StartAnimating(); };
+            _background.LayoutUpdated += (_, __) => SyncBackdrop();
+            LocationChanged += (_, __) => SyncBackdrop();
             Drop += OnDrop;
             DragOver += (_, e) =>
             {
@@ -97,6 +107,8 @@ namespace WindowsPersonalizer.Shell
             Closed += (_, __) =>
             {
                 _runningTimer.Stop();
+                if (_animating) CompositionTarget.Rendering -= OnFrame;
+                _backdrop?.Close();
             };
             Closing += (_, __) => _appBar?.Dispose();
         }
@@ -107,22 +119,16 @@ namespace WindowsPersonalizer.Shell
 
         private void BuildChrome()
         {
-            var accent = ColorUtil.Parse(_theme.AccentColor, Colors.DodgerBlue);
             bool panel = _theme.DockStyle == DockStyle.Panel;
 
-            _background.Background = new SolidColorBrush(Dark
-                ? Color.FromArgb(panel ? (byte)235 : (byte)190, 0x1E, 0x1E, 0x22)
-                : Color.FromArgb(panel ? (byte)235 : (byte)175, 0xF6, 0xF6, 0xF8));
-            _background.BorderBrush = new SolidColorBrush(Dark ? Color.FromArgb(70, 255, 255, 255) : Color.FromArgb(60, 0, 0, 0));
+            // Two borders: a fine dark outline outside, a soft light highlight inside (like macOS).
+            _background.CornerRadius = new CornerRadius(_radius);
             _background.BorderThickness = new Thickness(panel ? 0 : 1);
-            _background.CornerRadius = new CornerRadius(panel ? 0 : 18);
-            _background.Effect = panel ? null : new System.Windows.Media.Effects.DropShadowEffect
-            {
-                BlurRadius = 18,
-                ShadowDepth = 2,
-                Opacity = 0.25,
-                Direction = 270,
-            };
+            _inner.CornerRadius = new CornerRadius(Math.Max(0, _radius - 1));
+            _inner.BorderThickness = panel
+                ? new Thickness(_theme.DockPosition == ScreenEdge.Left ? 0 : 1, 0, _theme.DockPosition == ScreenEdge.Left ? 1 : 0, 0)
+                : new Thickness(1);
+            _background.Child = _inner;
 
             _panel.Orientation = _vertical ? Orientation.Vertical : Orientation.Horizontal;
 
@@ -177,14 +183,75 @@ namespace WindowsPersonalizer.Shell
                 };
             }
 
-            var menu = new ContextMenu();
-            menu.Items.Add(MenuItem("Dock settings…", () => _openSettings()));
+            var menu = NewMenu();
             menu.Items.Add(MenuItem("Add app…", AddAppWithDialog));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(MenuItem("Dock settings…", () => _openSettings()));
             _background.ContextMenu = menu;
 
             _root.Children.Add(_background);
             _root.Children.Add(_panel);
         }
+
+        /// <summary>
+        /// Glass: a light tint over the real blur. Without blur (setting off or unsupported),
+        /// a more solid tint so it still looks clean.
+        /// </summary>
+        private void ApplyMaterial(bool glass)
+        {
+            bool panel = _theme.DockStyle == DockStyle.Panel;
+            byte tint = glass ? (Dark ? (byte)110 : (byte)95) : (Dark ? (byte)225 : (byte)215);
+            if (panel) tint = glass ? (byte)150 : (byte)240;
+            _inner.Background = new SolidColorBrush(Dark
+                ? Color.FromArgb(tint, 0x24, 0x24, 0x28)
+                : Color.FromArgb(tint, 0xFA, 0xFA, 0xFC));
+            _inner.BorderBrush = new SolidColorBrush(Dark ? Color.FromArgb(38, 255, 255, 255) : Color.FromArgb(110, 255, 255, 255));
+            _background.BorderBrush = new SolidColorBrush(Dark ? Color.FromArgb(150, 0, 0, 0) : Color.FromArgb(40, 0, 0, 0));
+            _background.Effect = panel ? null : new System.Windows.Media.Effects.DropShadowEffect
+            {
+                BlurRadius = 30,
+                ShadowDepth = 6,
+                Opacity = Dark ? 0.45 : 0.22,
+                Direction = 270,
+                Color = Colors.Black,
+            };
+        }
+
+        /// <summary>Shows the dock (and its glass backdrop underneath, if enabled).</summary>
+        public void Start()
+        {
+            if (_theme.GlassEffect)
+            {
+                _backdrop = new BackdropWindow();
+                _backdrop.Show();
+                if (_backdrop.BlurEnabled)
+                {
+                    Owner = _backdrop; // owned windows always stay above their owner
+                    ApplyMaterial(glass: true);
+                }
+                else
+                {
+                    _backdrop.Close();
+                    _backdrop = null;
+                }
+            }
+            Show();
+        }
+
+        private void SyncBackdrop()
+        {
+            if (_backdrop == null || PresentationSource.FromVisual(_background) == null || !_background.IsVisible) return;
+            Point tl = _background.PointToScreen(new Point(0, 0));
+            Point br = _background.PointToScreen(new Point(_background.ActualWidth, _background.ActualHeight));
+            var r = new Int32Rect((int)Math.Round(tl.X), (int)Math.Round(tl.Y),
+                (int)Math.Round(br.X - tl.X), (int)Math.Round(br.Y - tl.Y));
+            if (r.Equals(_lastBackdrop)) return;
+            _lastBackdrop = r;
+            _backdrop.SetBounds(r.X, r.Y, r.Width, r.Height, Dpi.ToPx(_radius));
+        }
+
+        private ContextMenu NewMenu() =>
+            MenuTheme.Create(Dark, ColorUtil.Parse(_theme.AccentColor, Colors.DodgerBlue));
 
         private void BuildItems()
         {
@@ -222,9 +289,9 @@ namespace WindowsPersonalizer.Shell
 
             var dot = new Ellipse
             {
-                Width = 5,
-                Height = 5,
-                Fill = new SolidColorBrush(Dark ? Color.FromRgb(230, 230, 230) : Color.FromRgb(40, 40, 40)),
+                Width = 4,
+                Height = 4,
+                Fill = new SolidColorBrush(Dark ? Color.FromRgb(235, 235, 240) : Color.FromRgb(30, 30, 34)),
                 Visibility = Visibility.Collapsed,
                 IsHitTestVisible = false,
             };
@@ -248,7 +315,9 @@ namespace WindowsPersonalizer.Shell
                 Cursor = Cursors.Hand,
                 RenderTransform = new TranslateTransform(),
             };
-            ToolTipService.SetInitialShowDelay(cell, 150);
+            ToolTipService.SetInitialShowDelay(cell, 100);
+            ToolTipService.SetVerticalOffset(cell, _theme.DockPosition == ScreenEdge.Bottom ? -10 : _theme.DockPosition == ScreenEdge.Top ? 10 : 0);
+            ToolTipService.SetHorizontalOffset(cell, _theme.DockPosition == ScreenEdge.Left ? 10 : _theme.DockPosition == ScreenEdge.Right ? -10 : 0);
             ToolTipService.SetPlacement(cell, _theme.DockPosition switch
             {
                 ScreenEdge.Bottom => PlacementMode.Top,
@@ -266,8 +335,12 @@ namespace WindowsPersonalizer.Shell
             cell.Children.Add(img);
             cell.Children.Add(dot);
 
+            // Pressing an icon darkens it, like macOS.
+            cell.MouseLeftButtonDown += (_, __) => img.Opacity = 0.6;
+            cell.MouseLeave += (_, __) => img.Opacity = 1;
             cell.MouseLeftButtonUp += (_, e) =>
             {
+                img.Opacity = 1;
                 e.Handled = true;
                 Bounce(cell);
                 try { click(); }
@@ -279,7 +352,7 @@ namespace WindowsPersonalizer.Shell
 
             if (item != null)
             {
-                var menu = new ContextMenu();
+                var menu = NewMenu();
                 menu.Items.Add(MenuItem("Open", () => ShellActions.Launch(item)));
                 string expanded = Environment.ExpandEnvironmentVariables(item.Target);
                 if (File.Exists(expanded))
@@ -330,37 +403,60 @@ namespace WindowsPersonalizer.Shell
 
         // ---- Magnification --------------------------------------------------------
 
-        private void Magnify(Point p)
+        /// <summary>Icon sizes for a mouse position (null = mouse away, everything at rest).</summary>
+        private double[] TargetSizes(Point? p)
         {
-            if (_maxSize <= _baseSize + 0.5) return;
-
+            var sizes = new double[_cells.Count];
             double total = _cells.Sum(c => c.BaseLength);
             double windowLength = _vertical ? _root.ActualHeight : _root.ActualWidth;
-            double pos = _vertical ? p.Y : p.X;
             double cursor = (windowLength - total) / 2; // resting layout is centered
             double range = _baseSize * 2.6;
 
-            foreach (var c in _cells)
+            for (int i = 0; i < _cells.Count; i++)
             {
+                var c = _cells[i];
                 double center = cursor + c.BaseLength / 2;
                 cursor += c.BaseLength;
-                if (c.IsSeparator) continue;
+                if (c.IsSeparator || p == null) { sizes[i] = _baseSize; continue; }
 
-                double d = Math.Abs(pos - center);
-                double t = Math.Max(0, 1 - d / range);
+                double pos = _vertical ? p.Value.Y : p.Value.X;
+                double t = Math.Max(0, 1 - Math.Abs(pos - center) / range);
                 // Smooth bell curve, like the macOS dock.
-                double size = _baseSize + (_maxSize - _baseSize) * (0.5 - 0.5 * Math.Cos(Math.PI * t));
-                c.Element.Width = size;
-                c.Element.Height = size;
+                sizes[i] = _baseSize + (_maxSize - _baseSize) * (0.5 - 0.5 * Math.Cos(Math.PI * t));
             }
+            return sizes;
         }
 
-        private void ResetSizes()
+        private void StartAnimating()
         {
-            foreach (var c in _cells.Where(c => !c.IsSeparator))
+            if (_animating || _maxSize <= _baseSize + 0.5) return;
+            _animating = true;
+            CompositionTarget.Rendering += OnFrame;
+        }
+
+        /// <summary>Every frame, icons glide toward their target size, so growing and shrinking is smooth.</summary>
+        private void OnFrame(object sender, EventArgs e)
+        {
+            var targets = TargetSizes(_mouse);
+            bool moving = false;
+            for (int i = 0; i < _cells.Count; i++)
             {
-                c.Element.Width = _baseSize;
-                c.Element.Height = _baseSize;
+                var c = _cells[i];
+                if (c.IsSeparator) continue;
+                double cur = c.Element.Width, target = targets[i];
+                double next = cur + (target - cur) * 0.32;
+                if (Math.Abs(target - next) < 0.25) next = target;
+                else moving = true;
+                if (next != cur)
+                {
+                    c.Element.Width = next;
+                    c.Element.Height = next;
+                }
+            }
+            if (!moving)
+            {
+                CompositionTarget.Rendering -= OnFrame;
+                _animating = false;
             }
         }
 
@@ -464,6 +560,11 @@ namespace WindowsPersonalizer.Shell
             {
                 Topmost = !fullScreen;
                 Visibility = fullScreen ? Visibility.Hidden : Visibility.Visible;
+                if (_backdrop != null)
+                {
+                    _backdrop.Topmost = !fullScreen;
+                    _backdrop.Visibility = Visibility;
+                }
             };
             _appBar.Attach();
         }

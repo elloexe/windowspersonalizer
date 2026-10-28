@@ -76,6 +76,7 @@
                                 <CheckBox x:Name="DarkApps" Content="Dark mode for apps" />
                                 <CheckBox x:Name="DarkSystem" Content="Dark mode for Windows (taskbar, Start, dock, top bar)" />
                                 <CheckBox x:Name="Transparency" Content="Transparency effects" />
+                                <CheckBox x:Name="Glass" Content="Frosted-glass blur on the Dock and Top bar" />
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource Card}">

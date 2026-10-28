@@ -27,6 +27,9 @@ namespace WindowsPersonalizer.Shell
         private readonly double _height;
         private readonly Brush _foreground;
         private readonly Brush _hover;
+        private readonly bool _dark;
+        private readonly Color _tint;
+        private readonly Border _frame = new Border();
         private readonly TextBlock _clock = new TextBlock();
         private readonly TextBlock _appName = new TextBlock();
         private readonly DispatcherTimer _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
@@ -41,20 +44,21 @@ namespace WindowsPersonalizer.Shell
             bool gnome = theme.TopBarStyle == TopBarStyle.Gnome;
             _height = gnome ? 30 : 28;
 
-            Color bg, fg;
+            Color fg;
+            _dark = gnome || theme.DarkSystem;
             if (gnome)
             {
-                bg = Color.FromArgb(245, 0x10, 0x10, 0x10);
+                _tint = Color.FromRgb(0x0E, 0x0E, 0x10);
                 fg = Color.FromRgb(0xF2, 0xF2, 0xF2);
             }
             else if (theme.DarkSystem)
             {
-                bg = Color.FromArgb(215, 0x1E, 0x1E, 0x22);
+                _tint = Color.FromRgb(0x1C, 0x1C, 0x20);
                 fg = Color.FromRgb(0xF5, 0xF5, 0xF7);
             }
             else
             {
-                bg = Color.FromArgb(200, 0xF4, 0xF4, 0xF6);
+                _tint = Color.FromRgb(0xF6, 0xF6, 0xF8);
                 fg = Color.FromRgb(0x1D, 0x1D, 0x1F);
             }
             _foreground = new SolidColorBrush(fg);
@@ -63,17 +67,23 @@ namespace WindowsPersonalizer.Shell
             Title = "Top bar";
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
-            Background = new SolidColorBrush(bg);
+            Background = Brushes.Transparent;
             ResizeMode = ResizeMode.NoResize;
             ShowInTaskbar = false;
             Topmost = true;
             ShowActivated = false;
             Height = _height;
-            FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI");
+            FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI");
             FontSize = 13;
             Foreground = _foreground;
 
-            Content = gnome ? BuildGnome() : BuildMac();
+            ApplyMaterial(glass: false);
+
+            // A hairline along the bottom edge separates the bar from windows below it.
+            _frame.BorderThickness = new Thickness(0, 0, 0, 1);
+            _frame.BorderBrush = new SolidColorBrush(_dark ? Color.FromArgb(120, 0, 0, 0) : Color.FromArgb(28, 0, 0, 0));
+            _frame.Child = gnome ? BuildGnome() : BuildMac();
+            Content = _frame;
 
             _timer.Tick += (_, __) => Tick();
             Tick();
@@ -89,12 +99,13 @@ namespace WindowsPersonalizer.Shell
         {
             var grid = new DockPanel { LastChildFill = false, Margin = new Thickness(8, 0, 8, 0) };
 
-            var logo = BarButton(Glyph(""), null);
+            var logo = BarButton(LogoGlyph(), null);
+            logo.ToolTip = "System menu";
             logo.Click += (_, __) => ShowMenu(logo, SystemMenu());
             DockPanel.SetDock(logo, Dock.Left);
             grid.Children.Add(logo);
 
-            _appName.FontWeight = FontWeights.Bold;
+            _appName.FontWeight = FontWeights.SemiBold;
             _appName.VerticalAlignment = VerticalAlignment.Center;
             _appName.Margin = new Thickness(8, 0, 8, 0);
             DockPanel.SetDock(_appName, Dock.Left);
@@ -166,6 +177,32 @@ namespace WindowsPersonalizer.Shell
             return grid;
         }
 
+        /// <summary>Four small rounded squares: the system menu button.</summary>
+        private UIElement LogoGlyph()
+        {
+            var g = new Grid { Width = 13, Height = 13, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 2, 0) };
+            for (int i = 0; i < 4; i++)
+            {
+                g.Children.Add(new Border
+                {
+                    Width = 5.5,
+                    Height = 5.5,
+                    CornerRadius = new CornerRadius(1.5),
+                    Background = _foreground,
+                    HorizontalAlignment = i % 2 == 0 ? HorizontalAlignment.Left : HorizontalAlignment.Right,
+                    VerticalAlignment = i < 2 ? VerticalAlignment.Top : VerticalAlignment.Bottom,
+                });
+            }
+            return g;
+        }
+
+        private void ApplyMaterial(bool glass)
+        {
+            bool gnome = _theme.TopBarStyle == TopBarStyle.Gnome;
+            byte alpha = gnome ? (byte)245 : glass ? (_dark ? (byte)120 : (byte)140) : (byte)235;
+            Background = new SolidColorBrush(Color.FromArgb(alpha, _tint.R, _tint.G, _tint.B));
+        }
+
         private TextBlock Glyph(string glyph) => new TextBlock
         {
             Text = glyph,
@@ -214,7 +251,7 @@ namespace WindowsPersonalizer.Shell
 
         private ContextMenu SystemMenu()
         {
-            var m = new ContextMenu();
+            var m = MenuTheme.Create(_dark, ColorUtil.Parse(_theme.AccentColor, Colors.DodgerBlue));
             m.Items.Add(Item("About This PC", () => ShellActions.Open("ms-settings:about")));
             m.Items.Add(new Separator());
             m.Items.Add(Item("System Settings…", () => ShellActions.Open("ms-settings:")));
@@ -327,6 +364,9 @@ namespace WindowsPersonalizer.Shell
             long ex = NativeMethods.GetWindowLongPtr(hwnd, NativeMethods.GWL_EXSTYLE).ToInt64();
             ex |= NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE;
             NativeMethods.SetWindowLongPtr(hwnd, NativeMethods.GWL_EXSTYLE, new IntPtr(ex));
+
+            if (_theme.GlassEffect && _theme.TopBarStyle == TopBarStyle.MacOS && NativeMethods.EnableBlurBehind(hwnd))
+                ApplyMaterial(glass: true);
 
             _appBar = new AppBar(this, ScreenEdge.Top, _height, reserveSpace: true);
             _appBar.Positioned += rc =>

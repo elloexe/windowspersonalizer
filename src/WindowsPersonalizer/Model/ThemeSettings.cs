@@ -74,6 +74,8 @@ namespace WindowsPersonalizer.Model
         public bool DarkSystem { get; set; }
         public string AccentColor { get; set; } = "#0078D4";
         public bool Transparency { get; set; } = true;
+        /// <summary>Frosted-glass blur behind the Dock and Top bar.</summary>
+        public bool GlassEffect { get; set; } = true;
         public bool AccentOnTaskbar { get; set; }
         public bool AccentOnTitleBars { get; set; }
 

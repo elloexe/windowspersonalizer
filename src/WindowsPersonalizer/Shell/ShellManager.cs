@@ -39,7 +39,7 @@ namespace WindowsPersonalizer.Shell
             {
                 _config.DockItems ??= ShellActions.DefaultDockItems();
                 _dock = new DockWindow(t.Clone(), _config, () => ConfigStore.Save(_config), _openSettings);
-                _dock.Show();
+                _dock.Start();
             }
         }
 

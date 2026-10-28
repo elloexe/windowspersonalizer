@@ -290,6 +290,7 @@ namespace WindowsPersonalizer
                 DarkApps.IsChecked = t.DarkApps;
                 DarkSystem.IsChecked = t.DarkSystem;
                 Transparency.IsChecked = t.Transparency;
+                Glass.IsChecked = t.GlassEffect;
                 AccentHex.Text = t.AccentColor;
                 AccentOnTaskbar.IsChecked = t.AccentOnTaskbar;
                 AccentOnTitleBars.IsChecked = t.AccentOnTitleBars;
@@ -349,6 +350,7 @@ namespace WindowsPersonalizer
                 DarkApps = DarkApps.IsChecked == true,
                 DarkSystem = DarkSystem.IsChecked == true,
                 Transparency = Transparency.IsChecked == true,
+                GlassEffect = Glass.IsChecked == true,
                 AccentColor = ColorUtil.TryParse(AccentHex.Text, out var ac) ? ColorUtil.ToHex(ac) : "#0078D4",
                 AccentOnTaskbar = AccentOnTaskbar.IsChecked == true,
                 AccentOnTitleBars = AccentOnTitleBars.IsChecked == true,

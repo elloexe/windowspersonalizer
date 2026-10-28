@@ -64,6 +64,72 @@ namespace WindowsPersonalizer.Native
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         public static extern uint RegisterWindowMessage(string lpString);
 
+        public const int WS_EX_TRANSPARENT = 0x00000020;
+        public const uint SWP_NOZORDER = 0x0004;
+        public const uint SWP_NOACTIVATE = 0x0010;
+
+        [DllImport("user32.dll")]
+        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+
+        [DllImport("user32.dll")]
+        public static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool redraw);
+
+        [DllImport("gdi32.dll")]
+        public static extern IntPtr CreateRoundRectRgn(int x1, int y1, int x2, int y2, int w, int h);
+
+        // ---- Glass (blur behind a window) -------------------------------------------
+
+        public const int WCA_ACCENT_POLICY = 19;
+        public const int ACCENT_ENABLE_BLURBEHIND = 3;
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct AccentPolicy
+        {
+            public int AccentState;
+            public int AccentFlags;
+            public uint GradientColor;
+            public int AnimationId;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WindowCompositionAttributeData
+        {
+            public int Attribute;
+            public IntPtr Data;
+            public int SizeOfData;
+        }
+
+        [DllImport("user32.dll")]
+        public static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+        public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+        public const int DWMWCP_ROUND = 2;
+
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+        /// <summary>Turns on the frosted-glass blur behind a window. Returns false where unsupported.</summary>
+        public static bool EnableBlurBehind(IntPtr hwnd)
+        {
+            var accent = new AccentPolicy { AccentState = ACCENT_ENABLE_BLURBEHIND };
+            int size = Marshal.SizeOf(accent);
+            IntPtr ptr = Marshal.AllocHGlobal(size);
+            try
+            {
+                Marshal.StructureToPtr(accent, ptr, false);
+                var data = new WindowCompositionAttributeData { Attribute = WCA_ACCENT_POLICY, Data = ptr, SizeOfData = size };
+                return SetWindowCompositionAttribute(hwnd, ref data) != 0;
+            }
+            catch (Exception)
+            {
+                return false; // Missing API (very old Windows / emulators).
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(ptr);
+            }
+        }
+
         // ---- Keyboard ----------------------------------------------------------
 
         public const byte VK_LWIN = 0x5B;

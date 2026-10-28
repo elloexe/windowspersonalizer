@@ -128,51 +128,79 @@ namespace WindowsPersonalizer.Services
             var g = new DrawingGroup();
             using (var dc = g.Open())
             {
-                dc.DrawRoundedRectangle(new LinearGradientBrush(Color.FromRgb(0x8E, 0x9E, 0xAB), Color.FromRgb(0x5D, 0x6D, 0x7E), 90),
-                    null, new Rect(0, 0, 100, 100), 22, 22);
-                dc.DrawRoundedRectangle(Brushes.White, null, new Rect(28, 28, 44, 44), 8, 8);
+                DrawTile(dc, Color.FromRgb(0x9A, 0xA4, 0xB2), Color.FromRgb(0x5F, 0x6A, 0x7A));
+                // A little app window glyph.
+                dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(235, 255, 255, 255)), null, new Rect(28, 32, 44, 36), 5, 5);
+                dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(0x5F, 0x6A, 0x7A)), null, new Rect(33, 42, 34, 21), 2, 2);
             }
-            g.Freeze();
-            _fallback = new DrawingImage(g);
-            _fallback.Freeze();
+            _fallback = Freeze(g);
             return _fallback;
         }
 
-        /// <summary>A magnifying-glass "Search" icon.</summary>
+        // App-icon shape: rounded square inset a little (like macOS icons), with a soft top highlight.
+        private static readonly Rect Tile = new Rect(7, 7, 86, 86);
+        private const double TileRadius = 21;
+
+        private static void DrawTile(DrawingContext dc, Color top, Color bottom, Color? outline = null)
+        {
+            dc.DrawRoundedRectangle(new LinearGradientBrush(top, bottom, 90), null, Tile, TileRadius, TileRadius);
+            var gloss = new LinearGradientBrush(Color.FromArgb(70, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), 90);
+            dc.DrawRoundedRectangle(gloss, null, new Rect(Tile.X, Tile.Y, Tile.Width, Tile.Height * 0.55), TileRadius, TileRadius);
+            dc.DrawRoundedRectangle(null, new Pen(new SolidColorBrush(outline ?? Color.FromArgb(40, 0, 0, 0)), 1),
+                Tile, TileRadius, TileRadius);
+        }
+
+        private static ImageSource Freeze(DrawingGroup g)
+        {
+            // Pin the drawing to a 100x100 box so tiles line up with real app icons.
+            using (var dc = g.Append())
+                dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, 100, 100));
+            g.Freeze();
+            var img = new DrawingImage(g);
+            img.Freeze();
+            return img;
+        }
+
+        /// <summary>Spotlight-style search icon: light tile with a dark magnifying glass.</summary>
         public static ImageSource SearchIcon(Color accent)
         {
             var g = new DrawingGroup();
             using (var dc = g.Open())
             {
-                dc.DrawRoundedRectangle(new LinearGradientBrush(Color.FromRgb(0x8E, 0x8E, 0x96), Color.FromRgb(0x48, 0x48, 0x50), 90),
-                    null, new Rect(0, 0, 100, 100), 24, 24);
-                var pen = new Pen(Brushes.White, 9) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
-                dc.DrawEllipse(null, pen, new Point(44, 44), 19, 19);
-                dc.DrawLine(pen, new Point(58, 58), new Point(74, 74));
+                DrawTile(dc, Color.FromRgb(0xFF, 0xFF, 0xFF), Color.FromRgb(0xE4, 0xE4, 0xEA), Color.FromArgb(55, 0, 0, 0));
+                var pen = new Pen(new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x42)), 7.5)
+                {
+                    StartLineCap = PenLineCap.Round,
+                    EndLineCap = PenLineCap.Round,
+                };
+                dc.DrawEllipse(null, pen, new Point(45, 45), 16, 16);
+                dc.DrawLine(pen, new Point(57, 57), new Point(70, 70));
             }
-            g.Freeze();
-            var img = new DrawingImage(g);
-            img.Freeze();
-            return img;
+            return Freeze(g);
         }
 
-        /// <summary>A Launchpad-style "all apps" icon (grid of dots).</summary>
+        /// <summary>Launchpad-style "all apps" icon: dark tile with a grid of colorful app squares.</summary>
         public static ImageSource LauncherIcon(Color accent)
         {
+            var colors = new[]
+            {
+                Color.FromRgb(0xFF, 0x5F, 0x57), Color.FromRgb(0xFF, 0x9F, 0x0A), Color.FromRgb(0xFF, 0xD6, 0x0A),
+                Color.FromRgb(0x30, 0xD1, 0x58), Color.FromRgb(0x64, 0xD2, 0xFF), Color.FromRgb(0x0A, 0x84, 0xFF),
+                Color.FromRgb(0x5E, 0x5C, 0xE6), Color.FromRgb(0xBF, 0x5A, 0xF2), Color.FromRgb(0xFF, 0x37, 0x5F),
+            };
             var g = new DrawingGroup();
             using (var dc = g.Open())
             {
-                dc.DrawRoundedRectangle(new LinearGradientBrush(ColorUtil.Shade(accent, 0.25), ColorUtil.Shade(accent, -0.25), 90),
-                    null, new Rect(0, 0, 100, 100), 24, 24);
+                DrawTile(dc, Color.FromRgb(0x6B, 0x6B, 0x75), Color.FromRgb(0x2E, 0x2E, 0x35));
                 for (int r = 0; r < 3; r++)
                     for (int c = 0; c < 3; c++)
-                        dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(235, 255, 255, 255)), null,
-                            new Rect(22 + c * 21, 22 + r * 21, 14, 14), 4, 4);
+                    {
+                        var col = colors[r * 3 + c];
+                        var brush = new LinearGradientBrush(ColorUtil.Shade(col, 0.15), ColorUtil.Shade(col, -0.1), 90);
+                        dc.DrawRoundedRectangle(brush, null, new Rect(25 + c * 18, 25 + r * 18, 14, 14), 4, 4);
+                    }
             }
-            g.Freeze();
-            var img = new DrawingImage(g);
-            img.Freeze();
-            return img;
+            return Freeze(g);
         }
     }
 }
